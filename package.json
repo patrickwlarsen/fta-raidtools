@@ -1,11 +1,12 @@
 {
   "name": "fta-raidtools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Tools for WoW TBC Anni guild From the Ashes",
   "main": "dist/main.js",
   "private": true,
   "scripts": {
     "dev": "tsc && node esbuild.renderer.mjs && electron .",
+    "dev:watch": "tsc && node esbuild.renderer.mjs && concurrently -n tsc,esbuild,electron \"tsc --watch --preserveWatchOutput\" \"node esbuild.renderer.mjs --watch\" \"electronmon .\"",
     "build": "tsc && node esbuild.renderer.mjs",
     "start": "electron .",
     "pack": "electron-builder --dir",
@@ -42,16 +43,24 @@
       "oneClick": true,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "patrickwlarsen",
+      "repo": "fta-raidtools"
     }
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "electron": "^35.0.0",
     "electron-builder": "^26.0.0",
+    "electronmon": "^2.0.4",
     "esbuild": "^0.27.4",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "ag-grid-community": "^35.1.0",
+    "electron-updater": "^6.8.3",
     "google-auth-library": "^10.6.1"
   }
 }

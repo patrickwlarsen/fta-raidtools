@@ -7,5 +7,6 @@ contextBridge.exposeInMainWorld("api", {
   writeSheet: (sheetName: string, values: string[][]) => ipcRenderer.invoke("sheets:write", sheetName, values),
   openCsvFile: () => ipcRenderer.invoke("dialog:open-csv"),
   fetchItemTooltip: (itemId: number) => ipcRenderer.invoke("wowhead:tooltip", itemId),
+  fetchRaidHelperEvent: (eventId: string) => ipcRenderer.invoke("raidhelper:event", eventId),
   selectServiceAccountKey: () => ipcRenderer.invoke("dialog:select-service-account"),
 });

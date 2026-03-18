@@ -1,20 +1,23 @@
 import { createGrid, GridApi, GridOptions, ColDef, AllCommunityModule, ModuleRegistry, themeAlpine, colorSchemeDark } from "ag-grid-community";
 import { RosterEntry } from "../../models/RosterEntry";
+import { rosterStore } from "../../store/RosterStore";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 const SHEET_NAME = "roster";
-const HEADERS = ["Name", "Rank", "Class", "MS", "OS", "Alt", "Profession 1", "Profession 2", "Notes"];
+const HEADERS = ["Name", "Raid-Helper name", "Rank", "Class", "MS", "OS", "Main", "Profession 1", "Profession 2", "Roll Modifier", "Notes"];
 
 const columnDefs: ColDef<RosterEntry>[] = [
   { field: "name", headerName: "Name", width: 140 },
+  { field: "raidHelperName", headerName: "Raid-Helper name", width: 160 },
   { field: "rank", headerName: "Rank", width: 110 },
   { field: "class", headerName: "Class", width: 120 },
   { field: "ms", headerName: "MS", width: 120 },
   { field: "os", headerName: "OS", width: 120 },
-  { field: "alt", headerName: "Alt", width: 140 },
+  { field: "main", headerName: "Main", width: 140 },
   { field: "profession1", headerName: "Profession 1", width: 160 },
   { field: "profession2", headerName: "Profession 2", width: 160 },
+  { field: "rollModifier", headerName: "Roll Modifier", width: 120 },
   { field: "notes", headerName: "Notes", flex: 1, minWidth: 160 },
 ];
 
@@ -24,14 +27,16 @@ function parseSheetRows(rows: string[][]): RosterEntry[] {
   if (rows.length < 2) return [];
   return rows.slice(1).map((row) => ({
     name: row[0]?.trim() ?? "",
-    rank: row[1]?.trim() ?? "",
-    class: row[2]?.trim() ?? "",
-    ms: row[3]?.trim() ?? "",
-    os: row[4]?.trim() ?? "",
-    alt: row[5]?.trim() ?? "",
-    profession1: row[6]?.trim() ?? "",
-    profession2: row[7]?.trim() ?? "",
-    notes: row[8]?.trim() ?? "",
+    raidHelperName: row[1]?.trim() ?? "",
+    rank: row[2]?.trim() ?? "",
+    class: row[3]?.trim() ?? "",
+    ms: row[4]?.trim() ?? "",
+    os: row[5]?.trim() ?? "",
+    main: row[6]?.trim() ?? "",
+    profession1: row[7]?.trim() ?? "",
+    profession2: row[8]?.trim() ?? "",
+    rollModifier: row[9]?.trim() ?? "",
+    notes: row[10]?.trim() ?? "",
   }));
 }
 
@@ -41,6 +46,10 @@ function getAllRows(): RosterEntry[] {
     if (node.data) rows.push(node.data);
   });
   return rows;
+}
+
+function syncToStore(): void {
+  rosterStore.replaceAll(getAllRows());
 }
 
 let spinnerEl: HTMLElement | null = null;
@@ -64,6 +73,7 @@ async function loadFromSheet(silent = false): Promise<void> {
   try {
     const rows = await window.api.fetchSheet(SHEET_NAME);
     const entries = parseSheetRows(rows);
+    rosterStore.replaceAll(entries);
     gridApi?.setGridOption("rowData", entries);
   } catch (err) {
     if (!silent) alert(`Failed to load roster: ${err instanceof Error ? err.message : err}`);
@@ -79,9 +89,10 @@ async function saveToSheet(): Promise<void> {
     return;
   }
 
-  const entries = getAllRows();
+  syncToStore();
+  const entries = rosterStore.getAll();
   const dataRows = entries.map((e) => [
-    e.name, e.rank, e.class, e.ms, e.os, e.alt, e.profession1, e.profession2, e.notes,
+    e.name, e.raidHelperName, e.rank, e.class, e.ms, e.os, e.main, e.profession1, e.profession2, e.rollModifier, e.notes,
   ]);
   await window.api.writeSheet(SHEET_NAME, [HEADERS, ...dataRows]);
 }
@@ -94,13 +105,15 @@ interface FieldDef {
 
 const formFields: FieldDef[] = [
   { key: "name", label: "Name", placeholder: "Character name" },
+  { key: "raidHelperName", label: "Raid-Helper name", placeholder: "Discord / Raid-Helper display name" },
   { key: "rank", label: "Rank", placeholder: "e.g. Officer, Raider, Trial" },
   { key: "class", label: "Class", placeholder: "e.g. Shaman, Warrior, Paladin" },
   { key: "ms", label: "Main Spec (MS)", placeholder: "e.g. Restoration" },
   { key: "os", label: "Off Spec (OS)", placeholder: "e.g. Elemental" },
-  { key: "alt", label: "Alt", placeholder: "e.g. no, yes - MainName" },
+  { key: "main", label: "Main", placeholder: "Main character name (blank if this is the main)" },
   { key: "profession1", label: "Profession 1", placeholder: "e.g. Leatherworking 375" },
   { key: "profession2", label: "Profession 2", placeholder: "e.g. Enchanting 300" },
+  { key: "rollModifier", label: "Roll Modifier", placeholder: "e.g. +10, -5" },
   { key: "notes", label: "Notes", placeholder: "Any additional notes" },
 ];
 
@@ -146,13 +159,15 @@ function showAddMemberModal(onAdd: (entry: RosterEntry) => void): void {
   addBtn.addEventListener("click", () => {
     const entry: RosterEntry = {
       name: inputs.name.value.trim(),
+      raidHelperName: inputs.raidHelperName.value.trim(),
       rank: inputs.rank.value.trim(),
       class: inputs.class.value.trim(),
       ms: inputs.ms.value.trim(),
       os: inputs.os.value.trim(),
-      alt: inputs.alt.value.trim(),
+      main: inputs.main.value.trim(),
       profession1: inputs.profession1.value.trim(),
       profession2: inputs.profession2.value.trim(),
+      rollModifier: inputs.rollModifier.value.trim(),
       notes: inputs.notes.value.trim(),
     };
     if (!entry.name) {
@@ -239,6 +254,7 @@ export function createRosterPage(): HTMLElement {
     const selected = gridApi?.getSelectedRows();
     if (selected && selected.length > 0) {
       gridApi?.applyTransaction({ remove: selected });
+      syncToStore();
     }
   });
 
@@ -253,6 +269,7 @@ export function createRosterPage(): HTMLElement {
 
   spinnerEl = document.createElement("div");
   spinnerEl.className = "grid-spinner";
+  spinnerEl.style.display = "none";
   spinnerEl.innerHTML = '<div class="spinner"></div>';
 
   const gridContainer = document.createElement("div");
@@ -275,12 +292,22 @@ export function createRosterPage(): HTMLElement {
     rowSelection: { mode: "multiRow" },
     undoRedoCellEditing: true,
     undoRedoCellEditingLimit: 20,
+    onCellValueChanged: () => {
+      syncToStore();
+    },
   };
 
   gridApi = createGrid(gridContainer, gridOptions);
 
-  // Auto-load from sheet on startup
-  loadFromSheet(true);
+  // Load from store if available, and subscribe for updates (e.g. from preload)
+  const cached = rosterStore.getAll();
+  if (cached.length > 0) {
+    gridApi.setGridOption("rowData", cached);
+  }
+
+  rosterStore.subscribe(() => {
+    gridApi?.setGridOption("rowData", rosterStore.getAll());
+  });
 
   return page;
 }

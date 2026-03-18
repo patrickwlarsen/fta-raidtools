@@ -4,6 +4,7 @@ import { NavLinkOptions, NavCallback } from "../atoms/NavLink";
 const navItems: NavLinkOptions[] = [
   { label: "Loot History", href: "#loot-history", active: true },
   { label: "Roster", href: "#roster" },
+  { label: "Attendance", href: "#attendance" },
   { label: "Settings", href: "#settings" },
 ];
 

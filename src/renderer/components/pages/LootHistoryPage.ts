@@ -234,6 +234,7 @@ export function createLootHistoryPage(): HTMLElement {
 
   spinnerEl = document.createElement("div");
   spinnerEl.className = "grid-spinner";
+  spinnerEl.style.display = "none";
   spinnerEl.innerHTML = '<div class="spinner"></div>';
 
   const gridContainer = document.createElement("div");
@@ -277,8 +278,15 @@ export function createLootHistoryPage(): HTMLElement {
 
   gridApi = createGrid(gridContainer, gridOptions);
 
-  // Auto-load from sheet on startup (silent — no alerts if unconfigured)
-  loadFromSheet(true);
+  // Load from store if available, and subscribe for updates (e.g. from preload)
+  const cached = lootStore.getAll();
+  if (cached.length > 0) {
+    gridApi.setGridOption("rowData", cached);
+  }
+
+  lootStore.subscribe(() => {
+    gridApi?.setGridOption("rowData", lootStore.getAll());
+  });
 
   return page;
 }

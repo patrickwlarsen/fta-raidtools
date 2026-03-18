@@ -365,3 +365,246 @@ main {
   font-style: italic;
   padding: 4px;
 }
+
+/* Attendance Page */
+.attendance-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.attendance-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: #a08a6a;
+}
+
+.attendance-error {
+  padding: 1rem;
+  color: #e85555;
+  background-color: rgba(232, 85, 85, 0.1);
+  border: 1px solid rgba(232, 85, 85, 0.3);
+  border-radius: 4px;
+}
+
+.attendance-url-error {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: #e85555;
+}
+
+.attendance-header {
+  margin-bottom: 1.25rem;
+}
+
+.attendance-event-title {
+  color: #d4a535;
+  font-size: 1.2rem;
+  margin-bottom: 0.25rem;
+}
+
+.attendance-meta {
+  font-size: 0.85rem;
+  color: #a08a6a;
+}
+
+.attendance-list {
+  border: 1px solid #5c3a10;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.attendance-row {
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid rgba(92, 58, 16, 0.4);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.attendance-row:last-child {
+  border-bottom: none;
+}
+
+.attendance-row:not(.attendance-row--header):hover {
+  background-color: rgba(212, 165, 53, 0.06);
+}
+
+.attendance-row--header {
+  background-color: #1a1008;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #c4a878;
+  cursor: default;
+}
+
+.attendance-col--name {
+  flex: 2;
+  min-width: 120px;
+}
+
+.attendance-col--class {
+  flex: 1.5;
+  min-width: 90px;
+}
+
+.attendance-col--spec {
+  flex: 1.5;
+  min-width: 90px;
+}
+
+.attendance-col--role {
+  flex: 1;
+  min-width: 70px;
+}
+
+.attendance-col--points {
+  flex: 0.7;
+  min-width: 60px;
+}
+
+.attendance-points-input {
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  text-align: center;
+}
+
+.attendance-points-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.attendance-col--award {
+  flex: 1.5;
+  min-width: 120px;
+}
+
+.attendance-award-input {
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.attendance-award-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.attendance-col--check {
+  width: 70px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.attendance-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #d4a535;
+  cursor: pointer;
+}
+
+.attendance-absences {
+  margin-top: 1.25rem;
+}
+
+.attendance-absences-title {
+  color: #a08a6a;
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+}
+
+.attendance-absences-list {
+  font-size: 0.85rem;
+  color: #7a6a4a;
+}
+
+.attendance-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.attendance-footer-spinner {
+  display: flex;
+  align-items: center;
+}
+
+.attendance-history-container {
+  margin-top: 1.5rem;
+}
+
+.attendance-history-title {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.attendance-history {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.attendance-history-row {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.attendance-history-row:last-child {
+  border-bottom: none;
+}
+
+.attendance-history-row--header {
+  background: var(--bg-secondary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.attendance-history-col--date {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.attendance-history-col--name {
+  flex: 1;
+  min-width: 140px;
+}
+
+.attendance-history-col--link {
+  flex: 1.5;
+  min-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendance-history-col--link a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.attendance-history-col--link a:hover {
+  text-decoration: underline;
+}
