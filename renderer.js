@@ -60076,21 +60076,12 @@ If you are trying to annotate ${containerName} with application data, use the '$
     rollSection.className = "settings-section";
     const rollHeading = document.createElement("h3");
     rollHeading.className = "settings-section-title";
-    rollHeading.textContent = "Balanced Roll Settings";
+    rollHeading.textContent = "Roll Modifier Settings";
     rollSection.appendChild(rollHeading);
     const rollForm = document.createElement("div");
     rollForm.className = "settings-form";
-    const newMember = createNumberField("New member value", "1.0");
-    const awardCompletion = createNumberField("Award for raid completion", "0.2");
-    const deductionWin = createNumberField("Deduction on item win", "0.1");
     const minRollMod = createNumberField("Minimum rollModifier", "0");
     const maxRollMod = createNumberField("Maximum rollModifier", "10");
-    rollForm.appendChild(newMember.label);
-    rollForm.appendChild(newMember.input);
-    rollForm.appendChild(awardCompletion.label);
-    rollForm.appendChild(awardCompletion.input);
-    rollForm.appendChild(deductionWin.label);
-    rollForm.appendChild(deductionWin.input);
     rollForm.appendChild(minRollMod.label);
     rollForm.appendChild(minRollMod.input);
     rollForm.appendChild(maxRollMod.label);
@@ -60106,9 +60097,6 @@ If you are trying to annotate ${containerName} with application data, use the '$
           serviceAccountKeyPath: keyInput.value.trim()
         });
         const entries = [
-          { key: "New member value", value: newMember.input.value.trim() },
-          { key: "Award for raid completion", value: awardCompletion.input.value.trim() },
-          { key: "Deduction on item win", value: deductionWin.input.value.trim() },
           { key: "Minimum rollModifier", value: minRollMod.input.value.trim() },
           { key: "Maximum rollModifier", value: maxRollMod.input.value.trim() }
         ];
@@ -60134,9 +60122,6 @@ If you are trying to annotate ${containerName} with application data, use the '$
       keyInput.value = config.serviceAccountKeyPath;
     });
     function loadFromStore() {
-      newMember.input.value = settingsStore.get("New member value");
-      awardCompletion.input.value = settingsStore.get("Award for raid completion");
-      deductionWin.input.value = settingsStore.get("Deduction on item win");
       minRollMod.input.value = settingsStore.get("Minimum rollModifier");
       maxRollMod.input.value = settingsStore.get("Maximum rollModifier");
     }
@@ -60701,7 +60686,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
     banner.alt = "From the Ashes";
     const version = document.createElement("span");
     version.className = "app-version";
-    version.textContent = "v1.3.0";
+    version.textContent = "v1.4.2";
     bannerWrap.appendChild(banner);
     bannerWrap.appendChild(version);
     body.appendChild(bannerWrap);

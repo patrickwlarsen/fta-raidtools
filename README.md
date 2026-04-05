@@ -4,7 +4,7 @@ Desktop application for managing raids, loot, and attendance for the WoW TBC Ann
 
 ## Features
 
-- **Raid Management** - Configure raid-specific settings including completion awards, item win deductions, deduction caps, and absence penalties
+- **Raid Management** - Configure raid-specific settings including completion awards, item win deductions, deduction caps, and absence penalties with global min/max roll modifier bounds
 - **Loot History** - Import loot data from CSV with per-raid deduction tracking and maximum deduction caps
 - **Attendance Tracking** - Record attendance from Raid Helper events, track sign-up compliance, and apply configurable deductions for absences or missing sign-ups
 - **Google Sheets Integration** - Load and save raid settings, loot history, and attendance data to Google Sheets

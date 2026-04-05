@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.2
+
+### Changes
+- Removed global Balanced Roll Settings from the Settings page (new member value, award for completion, deduction on item win) — these values are now managed per-raid via the Raid Settings
+- Renamed settings section to "Roll Modifier Settings" with only min/max rollModifier fields
+- Fixed app header version display (was stuck on v1.3.0)
+
 ## v1.4.0
 
 ### New Features

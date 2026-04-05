@@ -100,30 +100,21 @@ export function createSettingsPage(): HTMLElement {
   connSection.appendChild(form);
   page.appendChild(connSection);
 
-  // --- Balanced Roll Settings ---
+  // --- Roll Modifier Settings ---
   const rollSection = document.createElement("div");
   rollSection.className = "settings-section";
 
   const rollHeading = document.createElement("h3");
   rollHeading.className = "settings-section-title";
-  rollHeading.textContent = "Balanced Roll Settings";
+  rollHeading.textContent = "Roll Modifier Settings";
   rollSection.appendChild(rollHeading);
 
   const rollForm = document.createElement("div");
   rollForm.className = "settings-form";
 
-  const newMember = createNumberField("New member value", "1.0");
-  const awardCompletion = createNumberField("Award for raid completion", "0.2");
-  const deductionWin = createNumberField("Deduction on item win", "0.1");
   const minRollMod = createNumberField("Minimum rollModifier", "0");
   const maxRollMod = createNumberField("Maximum rollModifier", "10");
 
-  rollForm.appendChild(newMember.label);
-  rollForm.appendChild(newMember.input);
-  rollForm.appendChild(awardCompletion.label);
-  rollForm.appendChild(awardCompletion.input);
-  rollForm.appendChild(deductionWin.label);
-  rollForm.appendChild(deductionWin.input);
   rollForm.appendChild(minRollMod.label);
   rollForm.appendChild(minRollMod.input);
   rollForm.appendChild(maxRollMod.label);
@@ -138,17 +129,12 @@ export function createSettingsPage(): HTMLElement {
     saveBtn.textContent = "Saving...";
 
     try {
-      // Save app config
       await window.api.saveConfig({
         googleSheetUrl: urlInput.value.trim(),
         serviceAccountKeyPath: keyInput.value.trim(),
       });
 
-      // Save balanced roll settings to store and sheet
       const entries = [
-        { key: "New member value", value: newMember.input.value.trim() },
-        { key: "Award for raid completion", value: awardCompletion.input.value.trim() },
-        { key: "Deduction on item win", value: deductionWin.input.value.trim() },
         { key: "Minimum rollModifier", value: minRollMod.input.value.trim() },
         { key: "Maximum rollModifier", value: maxRollMod.input.value.trim() },
       ];
@@ -170,7 +156,7 @@ export function createSettingsPage(): HTMLElement {
     }
   });
 
-  // Load current config + settings sheet
+  // Load current config
   window.api.loadConfig().then((config) => {
     urlInput.value = config.googleSheetUrl;
     keyInput.value = config.serviceAccountKeyPath;
@@ -178,9 +164,6 @@ export function createSettingsPage(): HTMLElement {
 
   // Populate from store (already preloaded on app start)
   function loadFromStore(): void {
-    newMember.input.value = settingsStore.get("New member value");
-    awardCompletion.input.value = settingsStore.get("Award for raid completion");
-    deductionWin.input.value = settingsStore.get("Deduction on item win");
     minRollMod.input.value = settingsStore.get("Minimum rollModifier");
     maxRollMod.input.value = settingsStore.get("Maximum rollModifier");
   }
