@@ -21,7 +21,7 @@ function createWindow(): void {
 
 function fetchRaidHelperEvent(eventId: string): Promise<unknown> {
   const https = require("https") as typeof import("https");
-  const url = `https://raid-helper.dev/api/v2/events/${encodeURIComponent(eventId)}`;
+  const url = `https://raid-helper.xyz/api/v4/events/${encodeURIComponent(eventId)}`;
   return new Promise((resolve, reject) => {
     https.get(url, (res) => {
       let data = "";

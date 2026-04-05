@@ -3,6 +3,8 @@ import { LootEntry } from "../../models/LootEntry";
 import { lootStore } from "../../store/LootStore";
 import { rosterStore } from "../../store/RosterStore";
 import { settingsStore } from "../../store/SettingsStore";
+import { raidSettingsStore } from "../../store/RaidSettingsStore";
+import { RaidSettingsEntry } from "../../models/RaidSettingsEntry";
 import { parseLootCsv } from "../../services/csvParser";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -132,7 +134,7 @@ async function loadFromSheet(silent = false): Promise<void> {
   }
 }
 
-function showCsvPasteModal(onSubmit: (csv: string) => void): void {
+function showCsvPasteModal(onSubmit: (csv: string, raidSettings: RaidSettingsEntry) => void): void {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
 
@@ -144,6 +146,47 @@ function showCsvPasteModal(onSubmit: (csv: string) => void): void {
   title.textContent = "Import data";
   modal.appendChild(title);
 
+  /* ── Raid dropdown ── */
+  const raidField = document.createElement("div");
+  raidField.className = "modal__field";
+
+  const raidLabel = document.createElement("label");
+  raidLabel.className = "modal__label";
+  raidLabel.textContent = "Raid";
+
+  const raidSelect = document.createElement("select");
+  raidSelect.className = "modal__input";
+
+  const defaultOpt = document.createElement("option");
+  defaultOpt.value = "";
+  defaultOpt.textContent = "Choose raid";
+  defaultOpt.disabled = true;
+  defaultOpt.selected = true;
+  raidSelect.appendChild(defaultOpt);
+
+  const raids = raidSettingsStore.getAll();
+  for (const raid of raids) {
+    const opt = document.createElement("option");
+    opt.value = raid.id;
+    opt.textContent = raid.name;
+    raidSelect.appendChild(opt);
+  }
+
+  const raidError = document.createElement("div");
+  raidError.className = "modal__error";
+  raidError.style.display = "none";
+  raidError.textContent = "Please select a raid.";
+
+  raidSelect.addEventListener("change", () => {
+    raidError.style.display = "none";
+  });
+
+  raidField.appendChild(raidLabel);
+  raidField.appendChild(raidSelect);
+  raidField.appendChild(raidError);
+  modal.appendChild(raidField);
+
+  /* ── CSV textarea ── */
   const hint = document.createElement("p");
   hint.className = "settings-hint";
   hint.textContent = "Paste CSV data below (including header row).";
@@ -167,10 +210,17 @@ function showCsvPasteModal(onSubmit: (csv: string) => void): void {
   importBtn.className = "btn btn--primary";
   importBtn.textContent = "Import";
   importBtn.addEventListener("click", () => {
+    if (!raidSelect.value) {
+      raidError.style.display = "block";
+      raidSelect.focus();
+      return;
+    }
     const csv = textarea.value.trim();
     if (!csv) return;
+    const selectedRaid = raids.find((r) => r.id === raidSelect.value);
+    if (!selectedRaid) return;
     overlay.remove();
-    onSubmit(csv);
+    onSubmit(csv, selectedRaid);
   });
 
   actions.appendChild(cancelBtn);
@@ -183,10 +233,10 @@ function showCsvPasteModal(onSubmit: (csv: string) => void): void {
   });
 
   document.body.appendChild(overlay);
-  textarea.focus();
+  raidSelect.focus();
 }
 
-function showImportModal(entries: LootEntry[]): void {
+function showImportModal(entries: LootEntry[], raidSettings: RaidSettingsEntry): void {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
 
@@ -255,7 +305,8 @@ function showImportModal(entries: LootEntry[]): void {
     verifyBtn.disabled = true;
     verifyBtn.textContent = "Importing...";
 
-    const deductionSetting = parseFloat(settingsStore.get("Deduction on item win")) || 0.1;
+    const deductionPerWin = parseFloat(raidSettings.itemWinDeduction) || 0;
+    const deductionMax = parseFloat(raidSettings.itemsDeductionMax) || Infinity;
 
     // Deduct roll modifier for non-OS entries and populate os/deducted fields
     const roster = rosterStore.getAll();
@@ -263,6 +314,9 @@ function showImportModal(entries: LootEntry[]): void {
     for (const r of roster) {
       rosterByName.set(r.name.toLowerCase(), r);
     }
+
+    // Track total deduction applied per player in this import
+    const totalDeducted = new Map<string, number>();
 
     let rosterChanged = false;
 
@@ -282,14 +336,24 @@ function showImportModal(entries: LootEntry[]): void {
         continue;
       }
 
+      const alreadyDeducted = totalDeducted.get(playerName) ?? 0;
+      const remaining = deductionMax - alreadyDeducted;
+      const deduction = Math.min(deductionPerWin, Math.max(remaining, 0));
+
+      if (deduction <= 0) {
+        entries[i].deducted = "0";
+        continue;
+      }
+
       const current = parseFloat(rosterEntry.rollModifier) || 1;
-      let newMod = parseFloat((current - deductionSetting).toFixed(4));
+      let newMod = parseFloat((current - deduction).toFixed(4));
       const minRollMod = parseFloat(settingsStore.get("Minimum rollModifier"));
       if (!isNaN(minRollMod) && newMod < minRollMod) {
         newMod = minRollMod;
       }
       rosterEntry.rollModifier = String(newMod);
-      entries[i].deducted = String(deductionSetting);
+      entries[i].deducted = String(deduction);
+      totalDeducted.set(playerName, alreadyDeducted + deduction);
       rosterChanged = true;
     }
 
@@ -385,7 +449,7 @@ export function createLootHistoryPage(): HTMLElement {
   importBtn.className = "btn btn--primary";
   importBtn.textContent = "Import data";
   importBtn.addEventListener("click", () => {
-    showCsvPasteModal((csv) => {
+    showCsvPasteModal((csv, raidSettings) => {
       const imported = parseLootCsv(csv);
       if (imported.length === 0) return;
 
@@ -402,7 +466,7 @@ export function createLootHistoryPage(): HTMLElement {
         return;
       }
 
-      showImportModal(newEntries);
+      showImportModal(newEntries, raidSettings);
     });
   });
 

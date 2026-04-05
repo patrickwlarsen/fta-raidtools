@@ -273,6 +273,31 @@ main {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
 }
 
+.modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.modal__header .modal__title {
+  margin-bottom: 0;
+}
+
+.modal__close {
+  background: none;
+  border: none;
+  color: #a08060;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.modal__close:hover {
+  color: #d4a535;
+}
+
 .modal__title {
   color: #d4a535;
   margin-bottom: 1.25rem;
@@ -304,6 +329,12 @@ main {
 
 .modal__input:focus {
   border-color: #d4a535;
+}
+
+.modal__error {
+  color: #e04040;
+  font-size: 0.8rem;
+  margin-top: 0.35rem;
 }
 
 .modal__actions {
@@ -632,6 +663,15 @@ main {
 
 .raid-content {
   margin-top: 1rem;
+}
+
+.section-title {
+  color: #c4a878;
+  font-size: 1.1rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #5c3a10;
+  padding-bottom: 0.4rem;
 }
 
 .raid-form {

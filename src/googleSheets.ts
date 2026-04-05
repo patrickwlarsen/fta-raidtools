@@ -82,7 +82,11 @@ export async function writeSheetData(
 
   const sheetId = extractSheetId(config.googleSheetUrl);
   const encodedRange = encodeURIComponent(range);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodedRange}?valueInputOption=USER_ENTERED`;
 
+  // Clear existing data first so stale rows beyond the new data are removed
+  const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodedRange}:clear`;
+  await apiRequest(clearUrl, token, "POST", JSON.stringify({}));
+
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodedRange}?valueInputOption=USER_ENTERED`;
   await apiRequest(url, token, "PUT", JSON.stringify({ values }));
 }

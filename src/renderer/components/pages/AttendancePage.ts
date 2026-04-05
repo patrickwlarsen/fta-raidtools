@@ -1,8 +1,10 @@
 import { RosterEntry } from "../../models/RosterEntry";
 import { AttendanceEntry } from "../../models/AttendanceEntry";
+import { RaidSettingsEntry } from "../../models/RaidSettingsEntry";
 import { rosterStore } from "../../store/RosterStore";
 import { attendanceStore } from "../../store/AttendanceStore";
 import { settingsStore } from "../../store/SettingsStore";
+import { raidSettingsStore } from "../../store/RaidSettingsStore";
 
 const ROSTER_SHEET = "roster";
 const ROSTER_HEADERS = ["Name", "Raid-Helper name", "Rank", "Class", "MS", "OS", "Main", "Profession 1", "Profession 2", "Roll Modifier", "Notes"];
@@ -27,12 +29,12 @@ function findRosterName(signUpName: string): string {
 function extractEventId(input: string): string | null {
   const trimmed = input.trim();
 
-  // Match: https://raid-helper.dev/api/v2/events/<id>
-  const apiMatch = trimmed.match(/raid-helper\.dev\/api\/v2\/events\/(\d+)/);
+  // Match: https://raid-helper.dev/api/v2/events/<id> or .xyz
+  const apiMatch = trimmed.match(/raid-helper\.(?:dev|xyz)\/api\/v2\/events\/(\d+)/);
   if (apiMatch) return apiMatch[1];
 
-  // Match: https://raid-helper.dev/event/<id>
-  const eventMatch = trimmed.match(/raid-helper\.dev\/event\/(\d+)/);
+  // Match: https://raid-helper.dev/event/<id> or .xyz
+  const eventMatch = trimmed.match(/raid-helper\.(?:dev|xyz)\/event\/(\d+)/);
   if (eventMatch) return eventMatch[1];
 
   return null;
@@ -48,7 +50,7 @@ function roleSort(roleName: string | undefined): number {
   }
 }
 
-function showUrlPrompt(onSubmit: (eventId: string) => void): void {
+function showUrlPrompt(onSubmit: (eventId: string, raidSettings: RaidSettingsEntry) => void): void {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
 
@@ -60,6 +62,47 @@ function showUrlPrompt(onSubmit: (eventId: string) => void): void {
   title.textContent = "New Attendance Entry";
   modal.appendChild(title);
 
+  /* ── Raid dropdown ── */
+  const raidField = document.createElement("div");
+  raidField.className = "modal__field";
+
+  const raidLabel = document.createElement("label");
+  raidLabel.className = "modal__label";
+  raidLabel.textContent = "Raid";
+
+  const raidSelect = document.createElement("select");
+  raidSelect.className = "modal__input";
+
+  const defaultOpt = document.createElement("option");
+  defaultOpt.value = "";
+  defaultOpt.textContent = "Choose raid";
+  defaultOpt.disabled = true;
+  defaultOpt.selected = true;
+  raidSelect.appendChild(defaultOpt);
+
+  const raids = raidSettingsStore.getAll();
+  for (const raid of raids) {
+    const opt = document.createElement("option");
+    opt.value = raid.id;
+    opt.textContent = raid.name;
+    raidSelect.appendChild(opt);
+  }
+
+  const raidError = document.createElement("div");
+  raidError.className = "modal__error";
+  raidError.style.display = "none";
+  raidError.textContent = "Please select a raid.";
+
+  raidSelect.addEventListener("change", () => {
+    raidError.style.display = "none";
+  });
+
+  raidField.appendChild(raidLabel);
+  raidField.appendChild(raidSelect);
+  raidField.appendChild(raidError);
+  modal.appendChild(raidField);
+
+  /* ── URL field ── */
   const field = document.createElement("div");
   field.className = "modal__field";
 
@@ -75,7 +118,7 @@ function showUrlPrompt(onSubmit: (eventId: string) => void): void {
   const error = document.createElement("div");
   error.className = "attendance-url-error";
   error.style.display = "none";
-  error.textContent = "Invalid URL. Use a raid-helper.dev event or API URL.";
+  error.textContent = "Invalid URL. Use a raid-helper.dev or raid-helper.xyz event or API URL.";
 
   field.appendChild(label);
   field.appendChild(input);
@@ -89,14 +132,21 @@ function showUrlPrompt(onSubmit: (eventId: string) => void): void {
   submitBtn.className = "btn btn--primary";
   submitBtn.textContent = "Load Event";
   submitBtn.addEventListener("click", () => {
+    if (!raidSelect.value) {
+      raidError.style.display = "block";
+      raidSelect.focus();
+      return;
+    }
     const eventId = extractEventId(input.value);
     if (!eventId) {
       error.style.display = "block";
       input.focus();
       return;
     }
+    const selectedRaid = raids.find((r) => r.id === raidSelect.value);
+    if (!selectedRaid) return;
     overlay.remove();
-    onSubmit(eventId);
+    onSubmit(eventId, selectedRaid);
   });
 
   input.addEventListener("keydown", (e) => {
@@ -118,10 +168,10 @@ function showUrlPrompt(onSubmit: (eventId: string) => void): void {
   });
 
   document.body.appendChild(overlay);
-  input.focus();
+  raidSelect.focus();
 }
 
-function buildAttendanceForm(event: RaidHelperEvent, eventId: string): HTMLElement {
+function buildAttendanceForm(event: RaidHelperEvent, eventId: string, raidSettings: RaidSettingsEntry): HTMLElement {
   const container = document.createElement("div");
   container.className = "attendance-form";
 
@@ -189,7 +239,7 @@ function buildAttendanceForm(event: RaidHelperEvent, eventId: string): HTMLEleme
     const pointsInput = document.createElement("input");
     pointsInput.type = "text";
     pointsInput.className = "attendance-points-input";
-    pointsInput.value = settingsStore.get("Award for raid completion") || "0.2";
+    pointsInput.value = raidSettings.awardForCompletion || "0";
     pointsInput.addEventListener("click", (e) => e.preventDefault());
     pointsWrap.appendChild(pointsInput);
 
@@ -242,6 +292,74 @@ function buildAttendanceForm(event: RaidHelperEvent, eventId: string): HTMLEleme
     container.appendChild(absSection);
   }
 
+  // Build set of all roster names that participated in the event (attendees + absences)
+  const allSignUpNames = new Set<string>();
+  for (const s of event.signUps) {
+    const rosterName = findRosterName(s.name);
+    if (rosterName) allSignUpNames.add(rosterName.toLowerCase());
+  }
+
+  // Find roster members who did not sign up at all
+  const roster = rosterStore.getAll();
+  const notSignedUp = roster.filter((r) => r.name && !allSignUpNames.has(r.name.toLowerCase()));
+
+  // "Did not sign up" section
+  const dnsSection = document.createElement("div");
+  dnsSection.className = "attendance-absences";
+
+  const dnsTitle = document.createElement("h3");
+  dnsTitle.className = "attendance-absences-title";
+  dnsTitle.textContent = `Did not sign up (${notSignedUp.length})`;
+  dnsSection.appendChild(dnsTitle);
+
+  const dnsList = document.createElement("div");
+  dnsList.className = "attendance-list";
+
+  const dnsHeader = document.createElement("div");
+  dnsHeader.className = "attendance-row attendance-row--header";
+  dnsHeader.innerHTML =
+    `<span class="attendance-col attendance-col--name">Name</span>` +
+    `<span class="attendance-col attendance-col--points">Deduction</span>` +
+    `<span class="attendance-col attendance-col--check">Apply</span>`;
+  dnsList.appendChild(dnsHeader);
+
+  const didNotSignUpDeduction = raidSettings.didNotSignUp || "0";
+
+  for (const member of notSignedUp) {
+    const row = document.createElement("label");
+    row.className = "attendance-row attendance-row--dns";
+
+    const nameCol = document.createElement("span");
+    nameCol.className = "attendance-col attendance-col--name";
+    nameCol.textContent = member.name;
+
+    const deductWrap = document.createElement("span");
+    deductWrap.className = "attendance-col attendance-col--points";
+    const deductInput = document.createElement("input");
+    deductInput.type = "text";
+    deductInput.className = "attendance-points-input";
+    deductInput.value = `-${didNotSignUpDeduction}`;
+    deductInput.addEventListener("click", (e) => e.preventDefault());
+    deductWrap.appendChild(deductInput);
+
+    const checkWrap = document.createElement("span");
+    checkWrap.className = "attendance-col attendance-col--check";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = true;
+    checkbox.className = "attendance-dns-checkbox";
+    checkbox.dataset.rosterName = member.name;
+    checkWrap.appendChild(checkbox);
+
+    row.appendChild(nameCol);
+    row.appendChild(deductWrap);
+    row.appendChild(checkWrap);
+    dnsList.appendChild(row);
+  }
+
+  dnsSection.appendChild(dnsList);
+  container.appendChild(dnsSection);
+
   // Footer with spinner and confirm button
   const footer = document.createElement("div");
   footer.className = "attendance-footer";
@@ -260,7 +378,7 @@ function buildAttendanceForm(event: RaidHelperEvent, eventId: string): HTMLEleme
     footerSpinner.style.display = "flex";
 
     try {
-      await confirmAndAward(list, event, eventId);
+      await confirmAndAward(list, dnsList, event, eventId);
     } finally {
       confirmBtn.disabled = false;
       footerSpinner.style.display = "none";
@@ -273,7 +391,7 @@ function buildAttendanceForm(event: RaidHelperEvent, eventId: string): HTMLEleme
   return container;
 }
 
-async function confirmAndAward(list: HTMLElement, event: RaidHelperEvent, eventId: string): Promise<void> {
+async function confirmAndAward(list: HTMLElement, dnsList: HTMLElement, event: RaidHelperEvent, eventId: string): Promise<void> {
   const roster = rosterStore.getAll();
   const rosterByName = new Map<string, RosterEntry>();
   for (const entry of roster) {
@@ -309,6 +427,28 @@ async function confirmAndAward(list: HTMLElement, event: RaidHelperEvent, eventI
     const maxRollMod = parseFloat(settingsStore.get("Maximum rollModifier"));
     if (!isNaN(maxRollMod) && newMod > maxRollMod) {
       newMod = maxRollMod;
+    }
+    rosterEntry.rollModifier = String(newMod);
+  }
+
+  // Apply "did not sign up" deductions
+  const dnsRows = Array.from(dnsList.querySelectorAll(".attendance-row--dns"));
+  for (const row of dnsRows) {
+    const checkbox = row.querySelector(".attendance-dns-checkbox") as HTMLInputElement | null;
+    if (!checkbox?.checked) continue;
+
+    const rosterName = checkbox.dataset.rosterName ?? "";
+    const pointsInput = row.querySelector(".attendance-points-input") as HTMLInputElement | null;
+    const deduction = parseFloat(pointsInput?.value ?? "0") || 0;
+
+    const rosterEntry = rosterByName.get(rosterName.toLowerCase());
+    if (!rosterEntry) continue;
+
+    const currentMod = parseFloat(rosterEntry.rollModifier) || 0;
+    let newMod = parseFloat((currentMod + deduction).toFixed(4));
+    const minRollMod = parseFloat(settingsStore.get("Minimum rollModifier"));
+    if (!isNaN(minRollMod) && newMod < minRollMod) {
+      newMod = minRollMod;
     }
     rosterEntry.rollModifier = String(newMod);
   }
@@ -428,7 +568,7 @@ export function createAttendancePage(): HTMLElement {
   attendanceStore.subscribe(() => buildHistoryList(historyContainer));
 
   newEntryBtn.addEventListener("click", () => {
-    showUrlPrompt(async (eventId) => {
+    showUrlPrompt(async (eventId, raidSettings) => {
       content.innerHTML = "";
 
       const spinner = document.createElement("div");
@@ -439,7 +579,7 @@ export function createAttendancePage(): HTMLElement {
       try {
         const event = await window.api.fetchRaidHelperEvent(eventId);
         content.innerHTML = "";
-        content.appendChild(buildAttendanceForm(event, eventId));
+        content.appendChild(buildAttendanceForm(event, eventId, raidSettings));
       } catch (err) {
         content.innerHTML = "";
         const errEl = document.createElement("div");

@@ -58644,6 +58644,51 @@ If you are trying to annotate ${containerName} with application data, use the '$
   };
   var settingsStore = new SettingsStore();
 
+  // src/renderer/store/RaidSettingsStore.ts
+  var STORAGE_KEY4 = "fta-raidsettings";
+  var RaidSettingsStore = class {
+    entries = [];
+    listeners = /* @__PURE__ */ new Set();
+    constructor() {
+      this.load();
+    }
+    getAll() {
+      return [...this.entries];
+    }
+    getById(id) {
+      return this.entries.find((e) => e.id === id);
+    }
+    replaceAll(entries) {
+      this.entries = entries;
+      this.persist();
+      this.notify();
+    }
+    subscribe(listener) {
+      this.listeners.add(listener);
+      return () => this.listeners.delete(listener);
+    }
+    notify() {
+      this.listeners.forEach((fn) => fn());
+    }
+    persist() {
+      try {
+        localStorage.setItem(STORAGE_KEY4, JSON.stringify(this.entries));
+      } catch {
+      }
+    }
+    load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY4);
+        if (raw) {
+          this.entries = JSON.parse(raw);
+        }
+      } catch {
+        this.entries = [];
+      }
+    }
+  };
+  var raidSettingsStore = new RaidSettingsStore();
+
   // src/renderer/services/csvParser.ts
   function parseLootCsv(csv) {
     const lines = csv.trim().split("\n");
@@ -58810,6 +58855,37 @@ If you are trying to annotate ${containerName} with application data, use the '$
     title.className = "modal__title";
     title.textContent = "Import data";
     modal.appendChild(title);
+    const raidField = document.createElement("div");
+    raidField.className = "modal__field";
+    const raidLabel = document.createElement("label");
+    raidLabel.className = "modal__label";
+    raidLabel.textContent = "Raid";
+    const raidSelect = document.createElement("select");
+    raidSelect.className = "modal__input";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "Choose raid";
+    defaultOpt.disabled = true;
+    defaultOpt.selected = true;
+    raidSelect.appendChild(defaultOpt);
+    const raids = raidSettingsStore.getAll();
+    for (const raid of raids) {
+      const opt = document.createElement("option");
+      opt.value = raid.id;
+      opt.textContent = raid.name;
+      raidSelect.appendChild(opt);
+    }
+    const raidError = document.createElement("div");
+    raidError.className = "modal__error";
+    raidError.style.display = "none";
+    raidError.textContent = "Please select a raid.";
+    raidSelect.addEventListener("change", () => {
+      raidError.style.display = "none";
+    });
+    raidField.appendChild(raidLabel);
+    raidField.appendChild(raidSelect);
+    raidField.appendChild(raidError);
+    modal.appendChild(raidField);
     const hint = document.createElement("p");
     hint.className = "settings-hint";
     hint.textContent = "Paste CSV data below (including header row).";
@@ -58829,10 +58905,17 @@ If you are trying to annotate ${containerName} with application data, use the '$
     importBtn.className = "btn btn--primary";
     importBtn.textContent = "Import";
     importBtn.addEventListener("click", () => {
+      if (!raidSelect.value) {
+        raidError.style.display = "block";
+        raidSelect.focus();
+        return;
+      }
       const csv = textarea.value.trim();
       if (!csv) return;
+      const selectedRaid = raids.find((r) => r.id === raidSelect.value);
+      if (!selectedRaid) return;
       overlay.remove();
-      onSubmit(csv);
+      onSubmit(csv, selectedRaid);
     });
     actions.appendChild(cancelBtn);
     actions.appendChild(importBtn);
@@ -58842,9 +58925,9 @@ If you are trying to annotate ${containerName} with application data, use the '$
       if (e.target === overlay) overlay.remove();
     });
     document.body.appendChild(overlay);
-    textarea.focus();
+    raidSelect.focus();
   }
-  function showImportModal(entries) {
+  function showImportModal(entries, raidSettings) {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     const modal = document.createElement("div");
@@ -58894,12 +58977,14 @@ If you are trying to annotate ${containerName} with application data, use the '$
     verifyBtn.addEventListener("click", async () => {
       verifyBtn.disabled = true;
       verifyBtn.textContent = "Importing...";
-      const deductionSetting = parseFloat(settingsStore.get("Deduction on item win")) || 0.1;
+      const deductionPerWin = parseFloat(raidSettings.itemWinDeduction) || 0;
+      const deductionMax = parseFloat(raidSettings.itemsDeductionMax) || Infinity;
       const roster = rosterStore.getAll();
       const rosterByName = /* @__PURE__ */ new Map();
       for (const r of roster) {
         rosterByName.set(r.name.toLowerCase(), r);
       }
+      const totalDeducted = /* @__PURE__ */ new Map();
       let rosterChanged = false;
       for (let i = 0; i < entries.length; i++) {
         const isOs = checkboxes[i].checked;
@@ -58914,14 +58999,22 @@ If you are trying to annotate ${containerName} with application data, use the '$
           entries[i].deducted = "";
           continue;
         }
+        const alreadyDeducted = totalDeducted.get(playerName) ?? 0;
+        const remaining = deductionMax - alreadyDeducted;
+        const deduction = Math.min(deductionPerWin, Math.max(remaining, 0));
+        if (deduction <= 0) {
+          entries[i].deducted = "0";
+          continue;
+        }
         const current = parseFloat(rosterEntry.rollModifier) || 1;
-        let newMod = parseFloat((current - deductionSetting).toFixed(4));
+        let newMod = parseFloat((current - deduction).toFixed(4));
         const minRollMod = parseFloat(settingsStore.get("Minimum rollModifier"));
         if (!isNaN(minRollMod) && newMod < minRollMod) {
           newMod = minRollMod;
         }
         rosterEntry.rollModifier = String(newMod);
-        entries[i].deducted = String(deductionSetting);
+        entries[i].deducted = String(deduction);
+        totalDeducted.set(playerName, alreadyDeducted + deduction);
         rosterChanged = true;
       }
       const existing = lootStore.getAll();
@@ -59016,7 +59109,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
     importBtn.className = "btn btn--primary";
     importBtn.textContent = "Import data";
     importBtn.addEventListener("click", () => {
-      showCsvPasteModal((csv) => {
+      showCsvPasteModal((csv, raidSettings) => {
         const imported = parseLootCsv(csv);
         if (imported.length === 0) return;
         const existing = lootStore.getAll();
@@ -59030,7 +59123,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
           alert("No new entries to import (all duplicates).");
           return;
         }
-        showImportModal(newEntries);
+        showImportModal(newEntries, raidSettings);
       });
     });
     const saveBtn = document.createElement("button");
@@ -59399,7 +59492,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
   }
 
   // src/renderer/store/AttendanceStore.ts
-  var STORAGE_KEY4 = "fta-attendance";
+  var STORAGE_KEY5 = "fta-attendance";
   var AttendanceStore = class {
     entries = [];
     listeners = /* @__PURE__ */ new Set();
@@ -59428,13 +59521,13 @@ If you are trying to annotate ${containerName} with application data, use the '$
     }
     persist() {
       try {
-        localStorage.setItem(STORAGE_KEY4, JSON.stringify(this.entries));
+        localStorage.setItem(STORAGE_KEY5, JSON.stringify(this.entries));
       } catch {
       }
     }
     load() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY4);
+        const raw = localStorage.getItem(STORAGE_KEY5);
         if (raw) {
           this.entries = JSON.parse(raw);
         }
@@ -59461,9 +59554,9 @@ If you are trying to annotate ${containerName} with application data, use the '$
   }
   function extractEventId(input) {
     const trimmed = input.trim();
-    const apiMatch = trimmed.match(/raid-helper\.dev\/api\/v2\/events\/(\d+)/);
+    const apiMatch = trimmed.match(/raid-helper\.(?:dev|xyz)\/api\/v2\/events\/(\d+)/);
     if (apiMatch) return apiMatch[1];
-    const eventMatch = trimmed.match(/raid-helper\.dev\/event\/(\d+)/);
+    const eventMatch = trimmed.match(/raid-helper\.(?:dev|xyz)\/event\/(\d+)/);
     if (eventMatch) return eventMatch[1];
     return null;
   }
@@ -59490,6 +59583,37 @@ If you are trying to annotate ${containerName} with application data, use the '$
     title.className = "modal__title";
     title.textContent = "New Attendance Entry";
     modal.appendChild(title);
+    const raidField = document.createElement("div");
+    raidField.className = "modal__field";
+    const raidLabel = document.createElement("label");
+    raidLabel.className = "modal__label";
+    raidLabel.textContent = "Raid";
+    const raidSelect = document.createElement("select");
+    raidSelect.className = "modal__input";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "Choose raid";
+    defaultOpt.disabled = true;
+    defaultOpt.selected = true;
+    raidSelect.appendChild(defaultOpt);
+    const raids = raidSettingsStore.getAll();
+    for (const raid of raids) {
+      const opt = document.createElement("option");
+      opt.value = raid.id;
+      opt.textContent = raid.name;
+      raidSelect.appendChild(opt);
+    }
+    const raidError = document.createElement("div");
+    raidError.className = "modal__error";
+    raidError.style.display = "none";
+    raidError.textContent = "Please select a raid.";
+    raidSelect.addEventListener("change", () => {
+      raidError.style.display = "none";
+    });
+    raidField.appendChild(raidLabel);
+    raidField.appendChild(raidSelect);
+    raidField.appendChild(raidError);
+    modal.appendChild(raidField);
     const field = document.createElement("div");
     field.className = "modal__field";
     const label = document.createElement("label");
@@ -59502,7 +59626,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
     const error = document.createElement("div");
     error.className = "attendance-url-error";
     error.style.display = "none";
-    error.textContent = "Invalid URL. Use a raid-helper.dev event or API URL.";
+    error.textContent = "Invalid URL. Use a raid-helper.dev or raid-helper.xyz event or API URL.";
     field.appendChild(label);
     field.appendChild(input);
     field.appendChild(error);
@@ -59513,14 +59637,21 @@ If you are trying to annotate ${containerName} with application data, use the '$
     submitBtn.className = "btn btn--primary";
     submitBtn.textContent = "Load Event";
     submitBtn.addEventListener("click", () => {
+      if (!raidSelect.value) {
+        raidError.style.display = "block";
+        raidSelect.focus();
+        return;
+      }
       const eventId = extractEventId(input.value);
       if (!eventId) {
         error.style.display = "block";
         input.focus();
         return;
       }
+      const selectedRaid = raids.find((r) => r.id === raidSelect.value);
+      if (!selectedRaid) return;
       overlay.remove();
-      onSubmit(eventId);
+      onSubmit(eventId, selectedRaid);
     });
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") submitBtn.click();
@@ -59537,9 +59668,9 @@ If you are trying to annotate ${containerName} with application data, use the '$
       if (e.target === overlay) overlay.remove();
     });
     document.body.appendChild(overlay);
-    input.focus();
+    raidSelect.focus();
   }
-  function buildAttendanceForm(event, eventId) {
+  function buildAttendanceForm(event, eventId, raidSettings) {
     const container = document.createElement("div");
     container.className = "attendance-form";
     const header = document.createElement("div");
@@ -59581,7 +59712,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
       const pointsInput = document.createElement("input");
       pointsInput.type = "text";
       pointsInput.className = "attendance-points-input";
-      pointsInput.value = settingsStore.get("Award for raid completion") || "0.2";
+      pointsInput.value = raidSettings.awardForCompletion || "0";
       pointsInput.addEventListener("click", (e) => e.preventDefault());
       pointsWrap.appendChild(pointsInput);
       const awardWrap = document.createElement("span");
@@ -59624,6 +59755,55 @@ If you are trying to annotate ${containerName} with application data, use the '$
       absSection.appendChild(absNames);
       container.appendChild(absSection);
     }
+    const allSignUpNames = /* @__PURE__ */ new Set();
+    for (const s of event.signUps) {
+      const rosterName = findRosterName(s.name);
+      if (rosterName) allSignUpNames.add(rosterName.toLowerCase());
+    }
+    const roster = rosterStore.getAll();
+    const notSignedUp = roster.filter((r) => r.name && !allSignUpNames.has(r.name.toLowerCase()));
+    const dnsSection = document.createElement("div");
+    dnsSection.className = "attendance-absences";
+    const dnsTitle = document.createElement("h3");
+    dnsTitle.className = "attendance-absences-title";
+    dnsTitle.textContent = `Did not sign up (${notSignedUp.length})`;
+    dnsSection.appendChild(dnsTitle);
+    const dnsList = document.createElement("div");
+    dnsList.className = "attendance-list";
+    const dnsHeader = document.createElement("div");
+    dnsHeader.className = "attendance-row attendance-row--header";
+    dnsHeader.innerHTML = `<span class="attendance-col attendance-col--name">Name</span><span class="attendance-col attendance-col--points">Deduction</span><span class="attendance-col attendance-col--check">Apply</span>`;
+    dnsList.appendChild(dnsHeader);
+    const didNotSignUpDeduction = raidSettings.didNotSignUp || "0";
+    for (const member of notSignedUp) {
+      const row = document.createElement("label");
+      row.className = "attendance-row attendance-row--dns";
+      const nameCol = document.createElement("span");
+      nameCol.className = "attendance-col attendance-col--name";
+      nameCol.textContent = member.name;
+      const deductWrap = document.createElement("span");
+      deductWrap.className = "attendance-col attendance-col--points";
+      const deductInput = document.createElement("input");
+      deductInput.type = "text";
+      deductInput.className = "attendance-points-input";
+      deductInput.value = `-${didNotSignUpDeduction}`;
+      deductInput.addEventListener("click", (e) => e.preventDefault());
+      deductWrap.appendChild(deductInput);
+      const checkWrap = document.createElement("span");
+      checkWrap.className = "attendance-col attendance-col--check";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      checkbox.className = "attendance-dns-checkbox";
+      checkbox.dataset.rosterName = member.name;
+      checkWrap.appendChild(checkbox);
+      row.appendChild(nameCol);
+      row.appendChild(deductWrap);
+      row.appendChild(checkWrap);
+      dnsList.appendChild(row);
+    }
+    dnsSection.appendChild(dnsList);
+    container.appendChild(dnsSection);
     const footer = document.createElement("div");
     footer.className = "attendance-footer";
     const footerSpinner = document.createElement("div");
@@ -59638,7 +59818,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
       confirmBtn.disabled = true;
       footerSpinner.style.display = "flex";
       try {
-        await confirmAndAward(list, event, eventId);
+        await confirmAndAward(list, dnsList, event, eventId);
       } finally {
         confirmBtn.disabled = false;
         footerSpinner.style.display = "none";
@@ -59648,7 +59828,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
     container.appendChild(footer);
     return container;
   }
-  async function confirmAndAward(list, event, eventId) {
+  async function confirmAndAward(list, dnsList, event, eventId) {
     const roster = rosterStore.getAll();
     const rosterByName = /* @__PURE__ */ new Map();
     for (const entry of roster) {
@@ -59678,6 +59858,23 @@ If you are trying to annotate ${containerName} with application data, use the '$
       const maxRollMod = parseFloat(settingsStore.get("Maximum rollModifier"));
       if (!isNaN(maxRollMod) && newMod > maxRollMod) {
         newMod = maxRollMod;
+      }
+      rosterEntry.rollModifier = String(newMod);
+    }
+    const dnsRows = Array.from(dnsList.querySelectorAll(".attendance-row--dns"));
+    for (const row of dnsRows) {
+      const checkbox = row.querySelector(".attendance-dns-checkbox");
+      if (!checkbox?.checked) continue;
+      const rosterName = checkbox.dataset.rosterName ?? "";
+      const pointsInput = row.querySelector(".attendance-points-input");
+      const deduction = parseFloat(pointsInput?.value ?? "0") || 0;
+      const rosterEntry = rosterByName.get(rosterName.toLowerCase());
+      if (!rosterEntry) continue;
+      const currentMod = parseFloat(rosterEntry.rollModifier) || 0;
+      let newMod = parseFloat((currentMod + deduction).toFixed(4));
+      const minRollMod = parseFloat(settingsStore.get("Minimum rollModifier"));
+      if (!isNaN(minRollMod) && newMod < minRollMod) {
+        newMod = minRollMod;
       }
       rosterEntry.rollModifier = String(newMod);
     }
@@ -59778,7 +59975,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
     buildHistoryList(historyContainer);
     attendanceStore.subscribe(() => buildHistoryList(historyContainer));
     newEntryBtn.addEventListener("click", () => {
-      showUrlPrompt(async (eventId) => {
+      showUrlPrompt(async (eventId, raidSettings) => {
         content.innerHTML = "";
         const spinner = document.createElement("div");
         spinner.className = "attendance-loading";
@@ -59787,7 +59984,7 @@ If you are trying to annotate ${containerName} with application data, use the '$
         try {
           const event = await window.api.fetchRaidHelperEvent(eventId);
           content.innerHTML = "";
-          content.appendChild(buildAttendanceForm(event, eventId));
+          content.appendChild(buildAttendanceForm(event, eventId, raidSettings));
         } catch (err) {
           content.innerHTML = "";
           const errEl = document.createElement("div");
@@ -59949,11 +60146,14 @@ If you are trying to annotate ${containerName} with application data, use the '$
   }
 
   // src/renderer/components/pages/RaidPage.ts
+  ModuleRegistry.registerModules([AllCommunityModule]);
+  var SHEET_NAME2 = "raidsettings";
+  var HEADERS2 = ["ID", "name", "award-for-completion", "item-win-deduction", "items-deduction-max", "absence-unexcused", "did-not-sign-up"];
   function extractEventId2(input) {
     const trimmed = input.trim();
-    const apiMatch = trimmed.match(/raid-helper\.dev\/api\/v2\/events\/(\d+)/);
+    const apiMatch = trimmed.match(/raid-helper\.(?:dev|xyz)\/api\/v2\/events\/(\d+)/);
     if (apiMatch) return apiMatch[1];
-    const eventMatch = trimmed.match(/raid-helper\.dev\/event\/(\d+)/);
+    const eventMatch = trimmed.match(/raid-helper\.(?:dev|xyz)\/event\/(\d+)/);
     if (eventMatch) return eventMatch[1];
     return null;
   }
@@ -60078,6 +60278,160 @@ If you are trying to annotate ${containerName} with application data, use the '$
     container.appendChild(footer);
     return container;
   }
+  var raidSettingsFormFields = [
+    { key: "id", label: "ID", placeholder: "e.g. 4" },
+    { key: "name", label: "Name", placeholder: "e.g. Tempest Keep" },
+    { key: "awardForCompletion", label: "Award for Completion", placeholder: "e.g. 0.2" },
+    { key: "itemWinDeduction", label: "Item Win Deduction", placeholder: "e.g. 0.15" },
+    { key: "itemsDeductionMax", label: "Items Deduction Max", placeholder: "e.g. 0.4" },
+    { key: "absenceUnexcused", label: "Absence Unexcused", placeholder: "e.g. 0.25" },
+    { key: "didNotSignUp", label: "Did Not Sign Up", placeholder: "e.g. 0.1" }
+  ];
+  function showAddRaidModal(onAdd) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    const titleRow = document.createElement("div");
+    titleRow.className = "modal__header";
+    const title = document.createElement("h3");
+    title.className = "modal__title";
+    title.textContent = "Add new Raid";
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "modal__close";
+    closeBtn.textContent = "\xD7";
+    closeBtn.addEventListener("click", () => overlay.remove());
+    titleRow.appendChild(title);
+    titleRow.appendChild(closeBtn);
+    modal.appendChild(titleRow);
+    const inputs = {};
+    raidSettingsFormFields.forEach((field) => {
+      const group = document.createElement("div");
+      group.className = "modal__field";
+      const label = document.createElement("label");
+      label.className = "modal__label";
+      label.textContent = field.label;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "modal__input";
+      input.placeholder = field.placeholder;
+      inputs[field.key] = input;
+      group.appendChild(label);
+      group.appendChild(input);
+      modal.appendChild(group);
+    });
+    const actions = document.createElement("div");
+    actions.className = "modal__actions";
+    const addBtn = document.createElement("button");
+    addBtn.className = "btn btn--primary";
+    addBtn.textContent = "Add";
+    addBtn.addEventListener("click", () => {
+      const entry = {
+        id: inputs.id.value.trim(),
+        name: inputs.name.value.trim(),
+        awardForCompletion: inputs.awardForCompletion.value.trim(),
+        itemWinDeduction: inputs.itemWinDeduction.value.trim(),
+        itemsDeductionMax: inputs.itemsDeductionMax.value.trim(),
+        absenceUnexcused: inputs.absenceUnexcused.value.trim(),
+        didNotSignUp: inputs.didNotSignUp.value.trim()
+      };
+      if (!entry.name) {
+        inputs.name.focus();
+        return;
+      }
+      onAdd(entry);
+      overlay.remove();
+    });
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "btn";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => overlay.remove());
+    actions.appendChild(addBtn);
+    actions.appendChild(cancelBtn);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+    inputs.id.focus();
+  }
+  var raidSettingsColumnDefs = [
+    { field: "id", headerName: "ID", width: 70 },
+    { field: "name", headerName: "Name", width: 180 },
+    { field: "awardForCompletion", headerName: "Award for Completion", width: 170 },
+    { field: "itemWinDeduction", headerName: "Item Win Deduction", width: 160 },
+    { field: "itemsDeductionMax", headerName: "Items Deduction Max", width: 170 },
+    { field: "absenceUnexcused", headerName: "Absence Unexcused", width: 160 },
+    { field: "didNotSignUp", headerName: "Did Not Sign Up", flex: 1, minWidth: 140 }
+  ];
+  var rsGridApi = null;
+  function parseRaidSettingsSheetRows(rows) {
+    if (rows.length < 2) return [];
+    return rows.slice(1).map((row) => ({
+      id: row[0]?.trim() ?? "",
+      name: row[1]?.trim() ?? "",
+      awardForCompletion: row[2]?.trim() ?? "",
+      itemWinDeduction: row[3]?.trim() ?? "",
+      itemsDeductionMax: row[4]?.trim() ?? "",
+      absenceUnexcused: row[5]?.trim() ?? "",
+      didNotSignUp: row[6]?.trim() ?? ""
+    }));
+  }
+  function getAllRaidSettingsRows() {
+    const rows = [];
+    rsGridApi?.forEachNode((node) => {
+      if (node.data) rows.push(node.data);
+    });
+    return rows;
+  }
+  function syncRaidSettingsToStore() {
+    raidSettingsStore.replaceAll(getAllRaidSettingsRows());
+  }
+  var rsSpinnerEl = null;
+  function showRsSpinner() {
+    if (rsSpinnerEl) rsSpinnerEl.style.display = "flex";
+  }
+  function hideRsSpinner() {
+    if (rsSpinnerEl) rsSpinnerEl.style.display = "none";
+  }
+  async function loadRaidSettingsFromSheet(silent = false) {
+    const config = await window.api.loadConfig();
+    if (!config.googleSheetUrl || !config.serviceAccountKeyPath) {
+      if (!silent) alert("Configure Google Sheet URL and service account key in Settings.");
+      return;
+    }
+    showRsSpinner();
+    try {
+      const rows = await window.api.fetchSheet(SHEET_NAME2);
+      const entries = parseRaidSettingsSheetRows(rows);
+      raidSettingsStore.replaceAll(entries);
+      rsGridApi?.setGridOption("rowData", entries);
+    } catch (err) {
+      if (!silent) alert(`Failed to load raid settings: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      hideRsSpinner();
+    }
+  }
+  async function saveRaidSettingsToSheet() {
+    const config = await window.api.loadConfig();
+    if (!config.googleSheetUrl || !config.serviceAccountKeyPath) {
+      alert("Configure Google Sheet URL and service account key in Settings.");
+      return;
+    }
+    syncRaidSettingsToStore();
+    const entries = raidSettingsStore.getAll();
+    const dataRows = entries.map((e) => [
+      e.id,
+      e.name,
+      e.awardForCompletion,
+      e.itemWinDeduction,
+      e.itemsDeductionMax,
+      e.absenceUnexcused,
+      e.didNotSignUp
+    ]);
+    await window.api.writeSheet(SHEET_NAME2, [HEADERS2, ...dataRows]);
+  }
   function createRaidPage() {
     const page = document.createElement("div");
     page.className = "page raid-page";
@@ -60122,6 +60476,106 @@ If you are trying to annotate ${containerName} with application data, use the '$
           content.appendChild(errEl);
         }
       });
+    });
+    const sectionTitle = document.createElement("h2");
+    sectionTitle.className = "section-title";
+    sectionTitle.textContent = "Raid Settings";
+    page.appendChild(sectionTitle);
+    const rsToolbar = document.createElement("div");
+    rsToolbar.className = "loot-history-toolbar";
+    const rsLoadBtn = document.createElement("button");
+    rsLoadBtn.className = "btn btn--primary";
+    rsLoadBtn.textContent = "Load from Sheet";
+    rsLoadBtn.addEventListener("click", () => {
+      rsLoadBtn.disabled = true;
+      rsLoadBtn.textContent = "Loading...";
+      loadRaidSettingsFromSheet().finally(() => {
+        rsLoadBtn.disabled = false;
+        rsLoadBtn.textContent = "Load from Sheet";
+      });
+    });
+    const rsSaveBtn = document.createElement("button");
+    rsSaveBtn.className = "btn btn--primary";
+    rsSaveBtn.textContent = "Save to Sheet";
+    rsSaveBtn.addEventListener("click", async () => {
+      rsSaveBtn.disabled = true;
+      rsSaveBtn.textContent = "Saving...";
+      try {
+        await saveRaidSettingsToSheet();
+        rsSaveBtn.textContent = "Saved!";
+        setTimeout(() => {
+          rsSaveBtn.textContent = "Save to Sheet";
+        }, 2e3);
+      } catch (err) {
+        alert(`Failed to save raid settings: ${err instanceof Error ? err.message : err}`);
+        rsSaveBtn.textContent = "Save to Sheet";
+      } finally {
+        rsSaveBtn.disabled = false;
+      }
+    });
+    const rsAddBtn = document.createElement("button");
+    rsAddBtn.className = "btn btn--primary";
+    rsAddBtn.textContent = "Add new Raid";
+    rsAddBtn.addEventListener("click", () => {
+      showAddRaidModal(async (entry) => {
+        rsGridApi?.applyTransaction({ add: [entry] });
+        try {
+          await saveRaidSettingsToSheet();
+        } catch (err) {
+          alert(`Raid added locally but failed to save: ${err instanceof Error ? err.message : err}`);
+        }
+      });
+    });
+    const rsDeleteBtn = document.createElement("button");
+    rsDeleteBtn.className = "btn btn--danger";
+    rsDeleteBtn.textContent = "Delete Selected";
+    rsDeleteBtn.addEventListener("click", () => {
+      const selected = rsGridApi?.getSelectedRows();
+      if (selected && selected.length > 0) {
+        rsGridApi?.applyTransaction({ remove: selected });
+        syncRaidSettingsToStore();
+      }
+    });
+    rsToolbar.appendChild(rsLoadBtn);
+    rsToolbar.appendChild(rsSaveBtn);
+    rsToolbar.appendChild(rsAddBtn);
+    rsToolbar.appendChild(rsDeleteBtn);
+    page.appendChild(rsToolbar);
+    const gridWrap = document.createElement("div");
+    gridWrap.className = "grid-wrap";
+    rsSpinnerEl = document.createElement("div");
+    rsSpinnerEl.className = "grid-spinner";
+    rsSpinnerEl.style.display = "none";
+    rsSpinnerEl.innerHTML = '<div class="spinner"></div>';
+    const gridContainer = document.createElement("div");
+    gridContainer.className = "loot-history-grid";
+    gridWrap.appendChild(rsSpinnerEl);
+    gridWrap.appendChild(gridContainer);
+    page.appendChild(gridWrap);
+    const gridOptions = {
+      theme: themeAlpine.withPart(colorSchemeDark),
+      columnDefs: raidSettingsColumnDefs,
+      rowData: [],
+      defaultColDef: {
+        editable: true,
+        sortable: true,
+        filter: true,
+        resizable: true
+      },
+      rowSelection: { mode: "multiRow" },
+      undoRedoCellEditing: true,
+      undoRedoCellEditingLimit: 20,
+      onCellValueChanged: () => {
+        syncRaidSettingsToStore();
+      }
+    };
+    rsGridApi = createGrid(gridContainer, gridOptions);
+    const cached = raidSettingsStore.getAll();
+    if (cached.length > 0) {
+      rsGridApi.setGridOption("rowData", cached);
+    }
+    raidSettingsStore.subscribe(() => {
+      rsGridApi?.setGridOption("rowData", raidSettingsStore.getAll());
     });
     return page;
   }
@@ -60169,6 +60623,18 @@ If you are trying to annotate ${containerName} with application data, use the '$
       value: row[1]?.trim() ?? ""
     }));
   }
+  function parseRaidSettingsRows(rows) {
+    if (rows.length < 2) return [];
+    return rows.slice(1).map((row) => ({
+      id: row[0]?.trim() ?? "",
+      name: row[1]?.trim() ?? "",
+      awardForCompletion: row[2]?.trim() ?? "",
+      itemWinDeduction: row[3]?.trim() ?? "",
+      itemsDeductionMax: row[4]?.trim() ?? "",
+      absenceUnexcused: row[5]?.trim() ?? "",
+      didNotSignUp: row[6]?.trim() ?? ""
+    }));
+  }
   function parseAttendanceRows(rows) {
     if (rows.length < 2) return [];
     return rows.slice(1).map((row) => ({
@@ -60208,6 +60674,13 @@ If you are trying to annotate ${containerName} with application data, use the '$
         window.api.fetchSheet("settings").then((rows) => {
           settingsStore.replaceAll(parseSettingsRows(rows));
         }).catch((err) => console.error("Preload settings failed:", err))
+      );
+    }
+    if (raidSettingsStore.getAll().length === 0) {
+      fetches.push(
+        window.api.fetchSheet("raidsettings").then((rows) => {
+          raidSettingsStore.replaceAll(parseRaidSettingsRows(rows));
+        }).catch((err) => console.error("Preload raidsettings failed:", err))
       );
     }
     await Promise.all(fetches);

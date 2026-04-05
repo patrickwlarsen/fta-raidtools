@@ -8,10 +8,12 @@ import { lootStore } from "./store/LootStore";
 import { rosterStore } from "./store/RosterStore";
 import { attendanceStore } from "./store/AttendanceStore";
 import { settingsStore } from "./store/SettingsStore";
+import { raidSettingsStore } from "./store/RaidSettingsStore";
 import { LootEntry } from "./models/LootEntry";
 import { RosterEntry } from "./models/RosterEntry";
 import { AttendanceEntry } from "./models/AttendanceEntry";
 import { SettingsEntry } from "./models/SettingsEntry";
+import { RaidSettingsEntry } from "./models/RaidSettingsEntry";
 
 type PageFactory = () => HTMLElement;
 
@@ -62,6 +64,19 @@ function parseSettingsRows(rows: string[][]): SettingsEntry[] {
   }));
 }
 
+function parseRaidSettingsRows(rows: string[][]): RaidSettingsEntry[] {
+  if (rows.length < 2) return [];
+  return rows.slice(1).map((row) => ({
+    id: row[0]?.trim() ?? "",
+    name: row[1]?.trim() ?? "",
+    awardForCompletion: row[2]?.trim() ?? "",
+    itemWinDeduction: row[3]?.trim() ?? "",
+    itemsDeductionMax: row[4]?.trim() ?? "",
+    absenceUnexcused: row[5]?.trim() ?? "",
+    didNotSignUp: row[6]?.trim() ?? "",
+  }));
+}
+
 function parseAttendanceRows(rows: string[][]): AttendanceEntry[] {
   if (rows.length < 2) return [];
   return rows.slice(1).map((row) => ({
@@ -107,6 +122,14 @@ async function preloadSheetData(): Promise<void> {
       window.api.fetchSheet("settings").then((rows) => {
         settingsStore.replaceAll(parseSettingsRows(rows));
       }).catch((err) => console.error("Preload settings failed:", err))
+    );
+  }
+
+  if (raidSettingsStore.getAll().length === 0) {
+    fetches.push(
+      window.api.fetchSheet("raidsettings").then((rows) => {
+        raidSettingsStore.replaceAll(parseRaidSettingsRows(rows));
+      }).catch((err) => console.error("Preload raidsettings failed:", err))
     );
   }
 
